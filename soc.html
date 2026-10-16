@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOC Command Center | Zero Trust</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='soc.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="soc-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <h2 style="margin-bottom: 2rem; padding-left: 1rem; font-size: 1.5rem;">
+                <i class="fas fa-shield-alt text-primary"></i> SOC
+            </h2>
+            <nav>
+                <a href="#" class="nav-item active"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+                <a href="#users" class="nav-item"><i class="fas fa-users"></i> Live Activity</a>
+                <a href="#apps" class="nav-item"><i class="fas fa-network-wired"></i> Micro-segmentation</a>
+                <a href="#user-mgmt" class="nav-item"><i class="fas fa-user-cog"></i> User Mgmt</a>
+                <a href="#devices" class="nav-item"><i class="fas fa-laptop"></i> Devices</a>
+                <a href="#audit" class="nav-item"><i class="fas fa-clipboard-check"></i> Audit Log</a>
+                <a href="#risks" class="nav-item"><i class="fas fa-exclamation-triangle"></i> Risks</a>
+                <a href="#iot" class="nav-item"><i class="fas fa-microchip"></i> IoT</a>
+                <div style="margin-top: auto; border-top: 1px solid var(--soc-border); padding-top: 1rem;">
+                    <a href="{{ url_for('admin') }}" class="nav-item"><i class="fas fa-arrow-left"></i> Back to Admin</a>
+                    <a href="{{ url_for('logout') }}" class="nav-item text-danger"><i class="fas fa-sign-out-alt"></i> Logout</a>
+                </div>
+            </nav>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Header -->
+            <div class="soc-header">
+                <div>
+                    <h1 style="font-size: 1.5rem; margin-bottom: 0.25rem;">Security Operations Center</h1>
+                    <div class="text-sm text-muted">
+                        <span class="live-indicator"></span> Live Monitoring • <span id="last-updated">{{ now }}</span>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 1rem;">
+                    <input type="text" id="searchInput" placeholder="Search logs, IPs, Users..." style="background: rgba(0,0,0,0.2); border: 1px solid var(--soc-border); padding: 0.5rem 1rem; border-radius: 0.5rem; color: white; width: 300px;">
+                    <button class="action-btn" onclick="updateDashboard()"><i class="fas fa-sync"></i> Refresh</button>
+                </div>
+            </div>
+
+            <!-- Alert Banner Area -->
+            <div id="alert-banner-area">
+                {% if high_risk_count > 0 %}
+                <div class="soc-panel" style="background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #fca5a5; margin-bottom: 1rem; display: flex; align-items: center; gap: 1rem;">
+                    <i class="fas fa-exclamation-circle fa-2x"></i>
+                    <div>
+                        <div style="font-weight:bold;font-size:1.1rem;">High Threat Level Detected</div>
+                        <div>{{ high_risk_count }} High Risk events in the last hour. Immediate attention required.</div>
+                    </div>
+                </div>
+                {% endif %}
+                {% if geo_anomalies_count > 0 %}
+                <div class="soc-panel" style="background: rgba(245, 158, 11, 0.2); border: 1px solid #f59e0b; color: #fcd34d; margin-bottom: 1rem; display: flex; align-items: center; gap: 1rem;">
+                    <i class="fas fa-globe-americas fa-2x"></i>
+                    <div>
+                        <div style="font-weight:bold;font-size:1.1rem;">Geo-Location Anomalies</div>
+                        <div>{{ geo_anomalies_count }} users logged in from unusual locations.</div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Metrics -->
+            <div class="metric-grid" id="metrics-panel">
+                <div class="metric-card alert">
+                    <div class="metric-label">High Risk Sessions</div>
+                    <div class="metric-value text-danger" id="m-high-risk">{{ high_risk_count }}</div>
+                    <div class="text-xs text-muted">Last 1 hour</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Active Users</div>
+                    <div class="metric-value" id="m-active-users">{{ active_users_count }}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Geo Anomalies</div>
+                    <div class="metric-value text-warning" id="m-geo-anomalies">{{ geo_anomalies_count }}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Blocked Attacks</div>
+                    <div class="metric-value text-success" id="m-blocked">{{ blocked_attacks_count }}</div>
+                </div>
+            </div>
+
+            <!-- System Health -->
+            <div class="metric-grid" style="margin-top: 1rem;">
+                <div class="metric-card">
+                    <div class="metric-label">CPU Usage</div>
+                    <div class="metric-value" id="sh-cpu">{{ system_health.cpu }}%</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Memory</div>
+                    <div class="metric-value" id="sh-memory">{{ system_health.memory }}%</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Disk</div>
+                    <div class="metric-value" id="sh-disk">{{ system_health.disk }}%</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">DB Size</div>
+                    <div class="metric-value" id="sh-db">{{ system_health.db_size }}</div>
+                </div>
+            </div>
+
+            <!-- Risk Trend Chart -->
+            <div class="soc-panel full-width" style="margin-bottom: 2rem;">
+                <div class="panel-header">
+                    <div class="panel-title">Risk Trend Analysis (Last 24 Hours)</div>
+                </div>
+                <div style="height: 300px;">
+                    <canvas id="riskChart"></canvas>
+                </div>
+            </div>
+
+            <div class="panel-grid">
+                <!-- Live User Activity -->
+                <div class="soc-panel full-width" id="users">
+                    <div class="panel-header">
+                        <div class="panel-title">Live User Activity & Session Monitor</div>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <span class="badge badge-info">Real-time</span>
+                            <button class="action-btn" onclick="exportTableToCSV('session-table', 'sessions.csv')" title="Export CSV"><i class="fas fa-download"></i></button>
+                        </div>
+                    </div>
+                    <table id="session-table">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Role</th>
+                                <th>IP Address</th>
+                                <th>Geo Location</th>
+                                <th>Device</th>
+                                <th>Risk Score</th>
+                                <th>Session Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="session-tbody">
+                            {% for s in sessions %}
+                            <tr class="{{ 'bg-danger-subtle' if s.risk_score > 70 else '' }}">
+                                <td>
+                                    <div style="display:flex;align-items:center;gap:0.5rem;">
+                                        <div style="width:30px;height:30px;background:#334155;border-radius:50%;display:flex;align-items:center;justify-content:center;">
+                                            {{ s.username[0]|upper }}
+                                        </div>
+                                        <div>
+                                            <div class="search-target">{{ s.username }}</div>
+                                            <div class="text-xs text-muted">{{ s.last_activity }}</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>{{ s.role }}</td>
+                                <td class="search-target">{{ s.ip_address }}</td>
+                                <td>
+                                    {{ s.geo_location }}
+                                    {% if s.geo_anomaly %}
+                                    <span class="badge badge-danger" title="Geo Anomaly Detected!"><i class="fas fa-plane"></i> Anomaly</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ s.device_info }}</td>
+                                <td>
+                                    <span class="{{ 'risk-high' if s.risk_score > 70 else ('risk-med' if s.risk_score > 30 else 'risk-low') }}">
+                                        {{ s.risk_score }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if s.is_active %}
+                                        <span class="badge badge-success">Active</span>
+                                    {% else %}
+                                        <span class="badge badge-danger">Blocked</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div style="display:flex;gap:0.5rem;">
+                                        <form action="{{ url_for('block_session', id=s.id) }}" method="POST" style="display:inline;">
+                                            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="action-btn danger" title="Block Session"><i class="fas fa-ban"></i></button>
+                                        </form>
+                                        <form action="{{ url_for('force_reauth', id=s.user_id) }}" method="POST" style="display:inline;">
+                                            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="action-btn" title="Force Re-Auth"><i class="fas fa-key"></i></button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- User Management -->
+                <div class="soc-panel full-width" id="user-mgmt">
+                    <div class="panel-header">
+                        <div class="panel-title">User Administration</div>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button class="action-btn" onclick="openCreateUserModal()"><i class="fas fa-plus"></i> New User</button>
+                            <button class="action-btn" onclick="exportTableToCSV('user-table', 'users.csv')" title="Export CSV"><i class="fas fa-download"></i></button>
+                        </div>
+                    </div>
+                    <table id="user-table">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th>Trust Score</th>
+                                <th>Permissions</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="user-mgmt-tbody">
+                            {% for u in all_users %}
+                            <tr>
+                                <td>
+                                    <div style="font-weight:bold;" class="search-target">{{ u.username }}</div>
+                                    <div class="text-xs text-muted search-target">{{ u.email }}</div>
+                                </td>
+                                <td>
+                                    <span class="badge {{ 'badge-info' if u.role == 'admin' else 'badge-success' }}">{{ u.role }}</span>
+                                </td>
+                                <td>
+                                    <span class="badge {{ 'badge-success' if u.status == 'active' else 'badge-danger' }}">{{ u.status }}</span>
+                                </td>
+                                <td>{{ u.trust_score }}</td>
+                                <td>
+                                    <form action="{{ url_for('update_permissions', id=u.id) }}" method="POST" style="display:flex;gap:0.25rem;">
+                                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                                        <input type="text" name="permissions" value="{{ u.permissions }}" placeholder="e.g. view_reports" style="width:120px;background:rgba(0,0,0,0.2);border:1px solid var(--soc-border);color:#fff;border-radius:0.25rem;font-size:0.8rem;padding:0.25rem;">
+                                        <button class="action-btn" title="Save"><i class="fas fa-save"></i></button>
+                                    </form>
+                                </td>
+                                <td>
+                                    <div style="display:flex;gap:0.5rem;">
+                                        <form action="{{ url_for('block_user', id=u.id) }}" method="POST">
+                                            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                                            {% if u.status == 'active' %}
+                                            <button class="action-btn danger" title="Block User"><i class="fas fa-ban"></i></button>
+                                            {% else %}
+                                            <button class="action-btn" title="Unblock User"><i class="fas fa-check"></i></button>
+                                            {% endif %}
+                                        </form>
+                                        <form action="{{ url_for('change_role', id=u.id) }}" method="POST">
+                                            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                                            <button class="action-btn" title="Toggle Role"><i class="fas fa-user-shield"></i></button>
+                                        </form>
+                                        <form action="{{ url_for('reset_mfa', id=u.id) }}" method="POST">
+                                            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                                            <button class="action-btn" title="Reset MFA"><i class="fas fa-key"></i></button>
+                                        </form>
+                                        <button class="action-btn" onclick="showUserHistory({{ u.id }}, '{{ u.username }}')" title="View History"><i class="fas fa-history"></i></button>
+                                        <form action="{{ url_for('delete_user', id=u.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to permanently delete this user? This action cannot be undone.');">
+                                            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                                            <button class="action-btn danger" title="Delete User"><i class="fas fa-trash"></i></button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Micro-segmentation & Protected Apps -->
+                <div class="soc-panel" id="apps">
+                    <div class="panel-header">
+                        <div class="panel-title">Micro-segmentation & Protected Apps</div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin-top: 1rem;" id="apps-grid">
+                        {% for app in protected_apps %}
+                        <div style="background: rgba(15, 23, 42, 0.5); padding: 1.25rem; border-radius: 0.75rem; border: 1px solid var(--soc-border);">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
+                                <div>
+                                    <h4 style="margin: 0; color: #6366f1;">{{ app.name }}</h4>
+                                    <div style="font-size: 0.75rem; color: #64748b;">{{ app.url_slug }}</div>
+                                </div>
+                                <span class="badge {% if app.sensitivity_level == 'high' %}badge-danger{% elif app.sensitivity_level == 'medium' %}badge-warning{% else %}badge-success{% endif %}">
+                                    {{ app.sensitivity_level|upper }}
+                                </span>
+                            </div>
+                            <p style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 1rem;">{{ app.description }}</p>
+                            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem;">
+                                <span style="color: #64748b;">Min Trust: <strong>{{ app.required_trust_score }}</strong></span>
+                                <div class="badge badge-success" style="font-size: 0.7rem;">Active</div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Device Trust -->
+                <div class="soc-panel" id="devices">
+                    <div class="panel-header">
+                        <div class="panel-title">Device Trust Monitor</div>
+                        <button class="action-btn" onclick="exportTableToCSV('device-table', 'devices.csv')" title="Export CSV"><i class="fas fa-download"></i></button>
+                    </div>
+                    <table id="device-table">
+                        <thead>
+                            <tr>
+                                <th>Fingerprint</th>
+                                <th>User</th>
+                                <th>Trust Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="device-tbody">
+                            {% for d in devices %}
+                            <tr>
+                                <td style="font-family:monospace;" class="search-target">{{ d.fingerprint[:12] }}...</td>
+                                <td class="search-target">{{ d.username }}</td>
+                                <td>
+                                    {% if d.is_trusted %}
+                                    <span class="badge badge-success">Trusted</span>
+                                    {% else %}
+                                    <span class="badge badge-warning">Untrusted</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div style="display:flex;gap:0.5rem;">
+                                        <form action="{{ url_for('toggle_device_trust', id=d.id) }}" method="POST">
+                                            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                                            <button class="action-btn {{ 'danger' if d.is_trusted else '' }}" title="{{ 'Revoke Trust' if d.is_trusted else 'Trust Device' }}">
+                                                <i class="fas {{ 'fa-times-circle' if d.is_trusted else 'fa-check-circle' }}"></i>
+                                            </button>
+                                        </form>
+                                        <form action="{{ url_for('delete_device', id=d.id) }}" method="POST">
+                                            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                                            <button class="action-btn danger" title="Delete Device"><i class="fas fa-trash"></i></button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Audit Logs -->
+                <div class="soc-panel full-width" id="audit">
+                    <div class="panel-header">
+                        <div class="panel-title">Audit Log (Admin Actions)</div>
+                        <button class="action-btn" onclick="exportTableToCSV('audit-table', 'audit.csv')" title="Export CSV"><i class="fas fa-download"></i></button>
+                    </div>
+                    <table id="audit-table">
+                        <thead>
+                            <tr>
+                                <th>Admin</th>
+                                <th>Action</th>
+                                <th>Target</th>
+                                <th>Time</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in audit_logs %}
+                            <tr>
+                                <td class="search-target">{{ log.username }}</td>
+                                <td class="search-target">{{ log.reason }}</td>
+                                <td>{{ log.ip_address }}</td>
+                                <td class="text-xs text-muted">{{ log.timestamp }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Risk Logs -->
+                <div class="soc-panel" id="risks">
+                    <div class="panel-header">
+                        <div class="panel-title">Recent High Risk Events</div>
+                        <button class="action-btn" onclick="exportTableToCSV('risk-table', 'risks.csv')" title="Export CSV"><i class="fas fa-download"></i></button>
+                    </div>
+                    <!-- Using a hidden table for CSV export convenience or structure the list as table -->
+                    <!-- Let's keep the list but also add a hidden table or just parse the list for CSV -->
+                    <!-- For consistency and search, let's switch to table for logs too -->
+                    <table id="risk-table">
+                        <thead>
+                            <tr>
+                                <th>Event</th>
+                                <th>User</th>
+                                <th>Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="risk-tbody">
+                            {% for log in risk_logs %}
+                            <tr>
+                                <td>
+                                    <div style="font-weight:600; color: {{ '#ef4444' if log.risk_score > 50 else '#f59e0b' }}">
+                                        {{ log.event_type }} ({{ log.risk_score }})
+                                    </div>
+                                    <div class="text-xs text-muted search-target">{{ log.reason }}</div>
+                                </td>
+                                <td class="search-target">{{ log.username }}</td>
+                                <td class="text-xs text-muted">{{ log.timestamp }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- IoT -->
+                 <div class="soc-panel" id="iot">
+                    <div class="panel-header">
+                        <div class="panel-title">IoT Device Monitoring</div>
+                         <button class="action-btn" onclick="exportTableToCSV('iot-table', 'iot.csv')" title="Export CSV"><i class="fas fa-download"></i></button>
+                    </div>
+                    <table id="iot-table">
+                        <thead>
+                            <tr>
+                                <th>Device</th>
+                                <th>Status</th>
+                                <th>Last Heartbeat</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for iot in iot_devices %}
+                            <tr>
+                                <td class="search-target">{{ iot.name }}</td>
+                                <td>
+                                    <span class="badge {{ 'badge-success' if iot.status == 'active' else 'badge-danger' }}">{{ iot.status }}</span>
+                                </td>
+                                <td>{{ iot.last_heartbeat }}</td>
+                                <td>
+                                    <form action="{{ url_for('block_iot', id=iot.id) }}" method="POST">
+                                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                                        <button class="action-btn">{{ 'Block' if iot.status == 'active' else 'Unblock' }}</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create User Modal -->
+    <div id="createUserModal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="panel-header">
+                <div class="panel-title">Create New User</div>
+                <button class="action-btn" onclick="closeCreateUserModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <form action="{{ url_for('create_user') }}" method="POST">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <div style="margin-bottom: 1rem;">
+                    <label style="display:block;color:#94a3b8;margin-bottom:0.5rem;">Username</label>
+                    <input type="text" name="username" required style="width:100%;padding:0.75rem;background:rgba(255,255,255,0.05);border:1px solid var(--soc-border);color:#fff;border-radius:0.5rem;">
+                </div>
+                <div style="margin-bottom: 1rem;">
+                    <label style="display:block;color:#94a3b8;margin-bottom:0.5rem;">Email</label>
+                    <input type="email" name="email" required style="width:100%;padding:0.75rem;background:rgba(255,255,255,0.05);border:1px solid var(--soc-border);color:#fff;border-radius:0.5rem;">
+                </div>
+                <div style="margin-bottom: 1rem;">
+                    <label style="display:block;color:#94a3b8;margin-bottom:0.5rem;">Password</label>
+                    <input type="password" name="password" required style="width:100%;padding:0.75rem;background:rgba(255,255,255,0.05);border:1px solid var(--soc-border);color:#fff;border-radius:0.5rem;">
+                </div>
+                <div style="margin-bottom: 1.5rem;">
+                    <label style="display:block;color:#94a3b8;margin-bottom:0.5rem;">Role</label>
+                    <select name="role" style="width:100%;padding:0.75rem;background:rgba(255,255,255,0.05);border:1px solid var(--soc-border);color:#fff;border-radius:0.5rem;">
+                        <option value="user">User</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </div>
+                <button type="submit" style="width:100%;padding:0.75rem;background:var(--primary);color:#fff;border:none;border-radius:0.5rem;cursor:pointer;font-weight:bold;">Create User</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- User History Modal -->
+    <div id="historyModal" class="modal">
+        <div class="modal-content">
+            <div class="panel-header">
+                <div class="panel-title">User Details: <span id="modalUsername"></span></div>
+                <button class="action-btn" onclick="closeModal()"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <div class="tab-header">
+                <button class="tab-btn active" onclick="switchTab('logs')">Risk Logs</button>
+                <button class="tab-btn" onclick="switchTab('sessions')">Sessions</button>
+                <button class="tab-btn" onclick="switchTab('devices')">Devices</button>
+            </div>
+
+            <div id="tab-logs" class="tab-content active">
+                <table id="historyTable">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Event</th>
+                            <th>Risk</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyTbody"></tbody>
+                </table>
+            </div>
+            
+            <div id="tab-sessions" class="tab-content">
+                <table id="sessionsTable">
+                    <thead>
+                        <tr>
+                            <th>Last Active</th>
+                            <th>IP Address</th>
+                            <th>Device</th>
+                            <th>Risk</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sessionsTbody"></tbody>
+                </table>
+            </div>
+
+            <div id="tab-devices" class="tab-content">
+                <table id="devicesTable">
+                    <thead>
+                        <tr>
+                            <th>Fingerprint</th>
+                            <th>Last Seen</th>
+                            <th>IP</th>
+                            <th>Trusted</th>
+                        </tr>
+                    </thead>
+                    <tbody id="devicesTbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentModalUserId = null;
+
+        // --- Search / Filter Logic ---
+        const searchInput = document.getElementById('searchInput');
+        searchInput.addEventListener('keyup', function() {
+            const filter = searchInput.value.toLowerCase();
+            const tables = document.querySelectorAll('table');
+            
+            tables.forEach(table => {
+                const rows = table.getElementsByTagName('tr');
+                for (let i = 1; i < rows.length; i++) { // Skip header
+                    let textContent = rows[i].textContent || rows[i].innerText;
+                    if (textContent.toLowerCase().indexOf(filter) > -1) {
+                        rows[i].style.display = "";
+                    } else {
+                        rows[i].style.display = "none";
+                    }
+                }
+            });
+        });
+
+        // --- CSV Export Logic ---
+        function exportTableToCSV(tableId, filename) {
+            const table = document.getElementById(tableId);
+            const rows = table.querySelectorAll('tr');
+            let csv = [];
+            
+            for (let i = 0; i < rows.length; i++) {
+                // Check if row is visible (respects search filter)
+                if (rows[i].style.display === 'none') continue;
+                
+                const row = [], cols = rows[i].querySelectorAll("td, th");
+                
+                for (let j = 0; j < cols.length; j++) {
+                    // Get text, clean it up
+                    let data = cols[j].innerText.replace(/(\r\n|\n|\r)/gm, " ").replace(/(\s\s)/gm, " ");
+                    data = data.replace(/"/g, '""'); // Escape double quotes
+                    row.push('"' + data + '"');
+                }
+                csv.push(row.join(","));
+            }
+            
+            downloadCSV(csv.join("\n"), filename);
+        }
+        
+        function downloadCSV(csv, filename) {
+            const csvFile = new Blob([csv], {type: "text/csv"});
+            const downloadLink = document.createElement("a");
+            downloadLink.download = filename;
+            downloadLink.href = window.URL.createObjectURL(csvFile);
+            downloadLink.style.display = "none";
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+        }
+
+        // --- Chart & Auto Refresh ---
+        const ctx = document.getElementById('riskChart').getContext('2d');
+        let riskChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: {{ risk_trend_labels | tojson }},
+                datasets: [{
+                    label: 'Average Risk Score',
+                    data: {{ risk_trend_data | tojson }},
+                    borderColor: '#ef4444',
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { color: '#94a3b8' } }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        grid: { color: 'rgba(148, 163, 184, 0.1)' },
+                        ticks: { color: '#94a3b8' }
+                    },
+                    x: {
+                        grid: { color: 'rgba(148, 163, 184, 0.1)' },
+                        ticks: { color: '#94a3b8' }
+                    }
+                }
+            }
+        });
+
+        // Auto Refresh
+        function updateDashboard() {
+            fetch('/soc/data')
+                .then(response => response.json())
+                .then(data => {
+                    // Update Time
+                    document.getElementById('last-updated').textContent = data.now;
+                    
+                    // Update Metrics
+                    document.getElementById('m-active-users').textContent = data.metrics.active_users;
+                    document.getElementById('m-high-risk').textContent = data.metrics.high_risk;
+                    document.getElementById('m-geo-anomalies').textContent = data.metrics.geo_anomalies;
+                    document.getElementById('m-blocked').textContent = data.metrics.blocked_attacks;
+
+                    // Update System Health
+                    document.getElementById('sh-cpu').textContent = data.system_health.cpu + '%';
+                    document.getElementById('sh-memory').textContent = data.system_health.memory + '%';
+                    document.getElementById('sh-disk').textContent = data.system_health.disk + '%';
+                    document.getElementById('sh-db').textContent = data.system_health.db_size;
+
+                    // Update Alert Banner
+                    const alertArea = document.getElementById('alert-banner-area');
+                    alertArea.innerHTML = ''; // Clear existing
+                    
+                    if (data.metrics.high_risk > 0) {
+                        const div = document.createElement('div');
+                        div.className = 'soc-panel';
+                        div.style.background = 'rgba(239, 68, 68, 0.2)';
+                        div.style.border = '1px solid #ef4444';
+                        div.style.color = '#fca5a5';
+                        div.style.marginBottom = '1rem';
+                        div.style.display = 'flex';
+                        div.style.alignItems = 'center';
+                        div.style.gap = '1rem';
+                        div.innerHTML = `<i class="fas fa-exclamation-circle fa-2x"></i> 
+                                         <div>
+                                            <div style="font-weight:bold;font-size:1.1rem;">High Threat Level Detected</div>
+                                            <div>${data.metrics.high_risk} High Risk events in the last hour. Immediate attention required.</div>
+                                         </div>`;
+                        alertArea.appendChild(div);
+                    }
+                    
+                    if (data.metrics.geo_anomalies > 0) {
+                        const div = document.createElement('div');
+                        div.className = 'soc-panel';
+                        div.style.background = 'rgba(245, 158, 11, 0.2)';
+                        div.style.border = '1px solid #f59e0b';
+                        div.style.color = '#fcd34d';
+                        div.style.marginBottom = '1rem';
+                        div.style.display = 'flex';
+                        div.style.alignItems = 'center';
+                        div.style.gap = '1rem';
+                        div.innerHTML = `<i class="fas fa-globe-americas fa-2x"></i> 
+                                         <div>
+                                            <div style="font-weight:bold;font-size:1.1rem;">Geo-Location Anomalies</div>
+                                            <div>${data.metrics.geo_anomalies} users logged in from unusual locations.</div>
+                                         </div>`;
+                        alertArea.appendChild(div);
+                    }
+                    
+                    // Update Chart
+                    riskChart.data.labels = data.risk_trend.labels;
+                    riskChart.data.datasets[0].data = data.risk_trend.data;
+                    riskChart.update();
+                    
+                    // Update Sessions Table
+                    const sessionTbody = document.getElementById('session-tbody');
+                    sessionTbody.innerHTML = '';
+                    data.sessions.forEach(s => {
+                        const row = document.createElement('tr');
+                        if (s.risk_score > 70) row.classList.add('bg-danger-subtle');
+                        
+                        // Construct Actions HTML
+                        const actionsHtml = `
+                            <div style="display:flex;gap:0.5rem;">
+                                <form action="/block_session/${s.id}" method="POST" style="display:inline;">
+                                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="action-btn danger" title="Block Session"><i class="fas fa-ban"></i></button>
+                                </form>
+                                <form action="/force_reauth/${s.user_id}" method="POST" style="display:inline;">
+                                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="action-btn" title="Force Re-Auth"><i class="fas fa-key"></i></button>
+                                </form>
+                            </div>
+                        `;
+                        
+                        const geoHtml = s.geo_anomaly ? 
+                            `${s.geo_location} <span class="badge badge-danger" title="Geo Anomaly Detected!"><i class="fas fa-plane"></i> Anomaly</span>` : 
+                            s.geo_location;
+
+                        const riskClass = s.risk_score > 70 ? 'risk-high' : (s.risk_score > 30 ? 'risk-med' : 'risk-low');
+                        const statusBadge = s.is_active ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-danger">Blocked</span>';
+                        
+                        row.innerHTML = `
+                            <td>
+                                <div style="display:flex;align-items:center;gap:0.5rem;">
+                                    <div style="width:30px;height:30px;background:#334155;border-radius:50%;display:flex;align-items:center;justify-content:center;">
+                                        ${s.username.charAt(0).toUpperCase()}
+                                    </div>
+                                    <div>
+                                        <div class="search-target">${s.username}</div>
+                                        <div class="text-xs text-muted">${s.last_activity}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>${s.role}</td>
+                            <td class="search-target">${s.ip_address}</td>
+                            <td>${geoHtml}</td>
+                            <td>${s.device_info}</td>
+                            <td><span class="${riskClass}">${s.risk_score}</span></td>
+                            <td>${statusBadge}</td>
+                            <td>${actionsHtml}</td>
+                        `;
+                        sessionTbody.appendChild(row);
+                    });
+
+                    // Update Apps Grid
+                    const appsGrid = document.getElementById('apps-grid');
+                    if (appsGrid && data.protected_apps) {
+                        appsGrid.innerHTML = '';
+                        data.protected_apps.forEach(app => {
+                            const badgeClass = app.sensitivity_level === 'high' ? 'badge-danger' : 
+                                              app.sensitivity_level === 'medium' ? 'badge-warning' : 'badge-success';
+                            const card = `
+                                <div style="background: rgba(15, 23, 42, 0.5); padding: 1.25rem; border-radius: 0.75rem; border: 1px solid var(--soc-border);">
+                                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
+                                        <div>
+                                            <h4 style="margin: 0; color: #6366f1;">${app.name}</h4>
+                                            <div style="font-size: 0.75rem; color: #64748b;">${app.url_slug}</div>
+                                        </div>
+                                        <span class="badge ${badgeClass}">${app.sensitivity_level.toUpperCase()}</span>
+                                    </div>
+                                    <p style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 1rem;">${app.description}</p>
+                                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem;">
+                                        <span style="color: #64748b;">Min Trust: <strong>${app.required_trust_score}</strong></span>
+                                        <div class="badge badge-success" style="font-size: 0.7rem;">Active</div>
+                                    </div>
+                                </div>
+                            `;
+                            appsGrid.innerHTML += card;
+                        });
+                    }
+
+                    // Update Risk Logs Table
+                    const riskTbody = document.getElementById('risk-tbody');
+                    if(riskTbody) {
+                        riskTbody.innerHTML = '';
+                        data.risk_logs.forEach(log => {
+                            const row = document.createElement('tr');
+                            const color = log.risk_score > 50 ? '#ef4444' : '#f59e0b';
+                            row.innerHTML = `
+                                <td>
+                                    <div style="font-weight:600; color: ${color}">
+                                        ${log.event_type} (${log.risk_score})
+                                    </div>
+                                    <div class="text-xs text-muted search-target">${log.reason}</div>
+                                </td>
+                                <td class="search-target">${log.username || 'Unknown'}</td>
+                                <td class="text-xs text-muted">${log.timestamp}</td>
+                            `;
+                            riskTbody.appendChild(row);
+                        });
+                    }
+                    
+                    // Re-apply filter if search input has value
+                    const event = new Event('keyup');
+                    document.getElementById('searchInput').dispatchEvent(event);
+                });
+        }
+        
+        setInterval(updateDashboard, 10000); // 10 seconds
+
+        // --- User History Modal ---
+        function showUserHistory(userId, username) {
+            currentModalUserId = userId;
+            document.getElementById('modalUsername').textContent = username;
+            document.getElementById('historyModal').style.display = 'block';
+            
+            // Reset to first tab
+            switchTab('logs');
+        }
+
+        function switchTab(tabName) {
+            // Update Buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.textContent.toLowerCase().includes(tabName === 'logs' ? 'risk logs' : tabName)) {
+                    btn.classList.add('active');
+                }
+            });
+            
+            // Update Content Visibility
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+            
+            // Fetch Data based on tab
+            if (tabName === 'logs') loadLogs();
+            if (tabName === 'sessions') loadSessions();
+            if (tabName === 'devices') loadDevices();
+        }
+
+        function loadLogs() {
+            const tbody = document.getElementById('historyTbody');
+            tbody.innerHTML = '<tr><td colspan="4">Loading...</td></tr>';
+            
+            fetch(`/soc/user_history/${currentModalUserId}`)
+                .then(res => res.json())
+                .then(logs => {
+                    tbody.innerHTML = '';
+                    if (logs.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="4">No history found</td></tr>';
+                        return;
+                    }
+                    logs.forEach(log => {
+                        const row = document.createElement('tr');
+                        const riskClass = log.risk_score > 70 ? 'risk-high' : (log.risk_score > 30 ? 'risk-med' : 'risk-low');
+                        row.innerHTML = `
+                            <td class="text-xs">${log.timestamp}</td>
+                            <td>${log.event_type}</td>
+                            <td><span class="${riskClass}">${log.risk_score}</span></td>
+                            <td class="text-xs text-muted">${log.reason || '-'} <br> IP: ${log.ip_address}</td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                })
+                .catch(err => console.error(err));
+        }
+
+        function loadSessions() {
+            const tbody = document.getElementById('sessionsTbody');
+            tbody.innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
+            
+            fetch(`/soc/user_sessions/${currentModalUserId}`)
+                .then(res => res.json())
+                .then(sessions => {
+                    tbody.innerHTML = '';
+                    if (sessions.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="5">No sessions found</td></tr>';
+                        return;
+                    }
+                    sessions.forEach(s => {
+                        const row = document.createElement('tr');
+                        const riskClass = s.risk_score > 70 ? 'risk-high' : (s.risk_score > 30 ? 'risk-med' : 'risk-low');
+                        row.innerHTML = `
+                            <td class="text-xs">${s.last_activity}</td>
+                            <td>${s.ip_address}</td>
+                            <td class="text-xs text-muted">${s.user_agent ? s.user_agent.substring(0, 30) + '...' : 'Unknown'}</td>
+                            <td><span class="${riskClass}">${s.risk_score}</span></td>
+                            <td>${s.is_active ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-danger">Closed</span>'}</td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                })
+                .catch(err => console.error(err));
+        }
+
+        function loadDevices() {
+            const tbody = document.getElementById('devicesTbody');
+            tbody.innerHTML = '<tr><td colspan="4">Loading...</td></tr>';
+            
+            fetch(`/soc/user_devices/${currentModalUserId}`)
+                .then(res => res.json())
+                .then(devices => {
+                    tbody.innerHTML = '';
+                    if (devices.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="4">No devices found</td></tr>';
+                        return;
+                    }
+                    devices.forEach(d => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td style="font-family:monospace;">${d.fingerprint ? d.fingerprint.substring(0, 12) + '...' : '-'}</td>
+                            <td class="text-xs">${d.last_seen}</td>
+                            <td>${d.ip_address}</td>
+                            <td>${d.is_trusted ? '<span class="badge badge-success">Trusted</span>' : '<span class="badge badge-warning">Untrusted</span>'}</td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                })
+                .catch(err => console.error(err));
+        }
+        
+        function closeModal() {
+            document.getElementById('historyModal').style.display = 'none';
+        }
+        
+        function openCreateUserModal() {
+            document.getElementById('createUserModal').style.display = 'block';
+        }
+
+        function closeCreateUserModal() {
+            document.getElementById('createUserModal').style.display = 'none';
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const historyModal = document.getElementById('historyModal');
+            const createModal = document.getElementById('createUserModal');
+            if (event.target == historyModal) {
+                historyModal.style.display = "none";
+            }
+            if (event.target == createModal) {
+                createModal.style.display = "none";
+            }
+        }
+    </script>
+</body>
+</html>

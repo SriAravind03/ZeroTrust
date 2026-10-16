@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Device Management</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="container">
+    <h1>Devices</h1>
+    <div style="background:#1e293b;padding:1rem;border-radius:0.75rem;border:1px solid #334155;">
+      <ul>
+        {% for d in devices %}
+        <li>{{ d['fingerprint'] }} • {{ d['user_agent'] }} • {{ d['ip_address'] }} • Trusted: {{ 'Yes' if d['is_trusted'] else 'No' }} • Last Seen: {{ d['last_seen'] }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div style="margin-top:1rem;">
+      <a class="button" href="{{ url_for('dashboard') }}" style="background:#6366f1;color:#fff;padding:0.6rem 1rem;border-radius:0.5rem;text-decoration:none;">Back to Dashboard</a>
+    </div>
+  </div>
+</body>
+</html>

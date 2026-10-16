@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Access Denied</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="container">
+    <div style="background:#1e293b;padding:1rem;border-radius:0.75rem;border:1px solid #334155;">
+      <h1>Access Denied</h1>
+      <p>{{ error }}</p>
+      {% if risk is defined %}
+      <p>Risk Score: {{ risk }}</p>
+      {% endif %}
+      <div style="margin-top:1rem;">
+        <a class="button" href="{{ url_for('logout') }}" style="background:#ef4444;color:#fff;padding:0.6rem 1rem;border-radius:0.5rem;text-decoration:none;">Logout</a>
+        <a class="button" href="{{ url_for('dashboard') }}" style="background:#6366f1;color:#fff;padding:0.6rem 1rem;border-radius:0.5rem;text-decoration:none;margin-left:0.5rem;">Back</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

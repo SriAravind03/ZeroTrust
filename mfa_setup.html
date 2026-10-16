@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MFA Setup - Zero Trust</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="animate-fade-in">
+    <div class="auth-container">
+        <div class="auth-header">
+            <h2>Secure Your Account</h2>
+            <p>Step 2 of 2: MFA Setup</p>
+        </div>
+        
+        {% if error %}
+        <div class="alert alert-error">{{ error }}</div>
+        {% endif %}
+
+        <div class="text-center">
+            <p class="text-sm text-muted mb-4">Scan this QR code with Google Authenticator or Microsoft Authenticator.</p>
+            
+            <div class="qr-container">
+                <img src="data:image/png;base64,{{ qr_code }}" alt="MFA QR Code" width="200" height="200">
+            </div>
+            
+            <div class="mb-4">
+                <p class="text-xs text-muted">Manual Entry Key:</p>
+                <code style="background: rgba(255,255,255,0.1); padding: 4px 8px; border-radius: 4px; letter-spacing: 2px;">{{ secret }}</code>
+            </div>
+
+            <form method="POST">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <div class="form-group">
+                    <label>Enter Verification Code</label>
+                    <input type="text" name="code" placeholder="000 000" required autocomplete="off" style="text-align:center; letter-spacing: 5px; font-size: 1.5rem;">
+                </div>
+                
+                <button type="submit" class="btn btn-primary">Verify & Complete Registration</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="container">
+    <h1>Welcome, {{ user['username'] }}</h1>
+    <p>Role: {{ user['role'] }}</p>
+    <p>Trust Score: {{ '%.2f'|format(user['trust_score']) }}</p>
+    <p>Current Risk Level: {{ risk_level }}</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
+      <div style="background:#1e293b;padding:1rem;border-radius:0.75rem;border:1px solid #334155;">
+        <h2>Current Risk Evaluation</h2>
+        <p>Risk Score: {{ current_risk }}</p>
+        <h3>Reasons</h3>
+        <ul>
+          {% for r in risk_reasons.split(';') if r %}
+          <li>{{ r }}</li>
+          {% endfor %}
+        </ul>
+        <canvas id="userRiskChart" height="120"></canvas>
+      </div>
+      <div style="background:#1e293b;padding:1rem;border-radius:0.75rem;border:1px solid #334155;">
+        <h2>Zero Trust Details</h2>
+        <ul>
+          <li>Identity Engine: MFA (TOTP/Push), hashed passwords</li>
+          <li>Device Trust: Fingerprint, user-agent, IP recognition</li>
+          <li>Policy (PDP/PEP): Resource-based access, per-request checks</li>
+          <li>Continuous Verification: Risk re-evaluated on every request</li>
+          <li>Risk Scoring: IP changes, new devices, behavior anomalies</li>
+        </ul>
+      </div>
+    </div>
+    <div class="grid" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+      <div style="background:#1e293b;padding:1rem;border-radius:0.75rem;border:1px solid #334155;">
+        <h2>Internal Applications</h2>
+        <p style="color:#94a3b8;font-size:0.85rem;margin-bottom:1rem;">Secure micro-segmented access to corporate resources.</p>
+        <div style="display:flex;flex-direction:column;gap:0.75rem;">
+          {% for app in protected_apps %}
+          <div style="background:rgba(15,23,42,0.5);padding:0.75rem;border-radius:0.5rem;border:1px solid #334155;display:flex;justify-content:space-between;align-items:center;">
+            <div>
+                <div style="font-weight:600;font-size:0.9rem;">{{ app['name'] }}</div>
+                <div style="font-size:0.75rem;color:#64748b;">Sensitivity: {{ app['sensitivity_level']|upper }}</div>
+            </div>
+            <a href="{{ url_for('internal_app_gateway', slug=app['url_slug']) }}" class="button" 
+               style="background:#6366f1;color:#fff;padding:0.3rem 0.75rem;border-radius:0.3rem;text-decoration:none;font-size:0.8rem;">Access App</a>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div style="background:#1e293b;padding:1rem;border-radius:0.75rem;border:1px solid #334155;">
+        <h2>Devices</h2>
+        <ul>
+          {% for d in devices %}
+          <li>
+            {{ d['fingerprint'] }} • {{ d['user_agent'] }} • {{ d['ip_address'] }} • Trusted: {{ 'Yes' if d['is_trusted'] else 'No' }}
+          </li>
+          {% endfor %}
+        </ul>
+        <div style="margin-top:1rem;">
+            <a href="{{ url_for('device_management') }}" class="button" style="background:#6366f1;color:#fff;padding:0.4rem 0.8rem;border-radius:0.4rem;text-decoration:none;font-size:0.85rem;display:inline-block;width:100%;text-align:center;">Manage Devices</a>
+        </div>
+      </div>
+
+      <div style="background:#1e293b;padding:1rem;border-radius:0.75rem;border:1px solid #334155;">
+        <h2>IoT Control</h2>
+        <p style="color:#94a3b8;font-size:0.85rem;margin-bottom:1rem;">Monitor and manage your IoT edge devices.</p>
+        <div style="margin-top:1rem;">
+            <a href="{{ url_for('iot_dashboard') }}" class="button" style="background:#8b5cf6;color:#fff;padding:0.4rem 0.8rem;border-radius:0.4rem;text-decoration:none;font-size:0.85rem;display:inline-block;width:100%;text-align:center;">IoT Control Panel</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Security History -->
+    <div style="margin-top:1rem; background:#1e293b;padding:1rem;border-radius:0.75rem;border:1px solid #334155;">
+        <h2>Security Event History</h2>
+        <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+            <thead>
+                <tr style="text-align:left; color:#94a3b8; border-bottom:1px solid #334155;">
+                    <th style="padding:0.5rem;">Event</th>
+                    <th style="padding:0.5rem;">Risk</th>
+                    <th style="padding:0.5rem;">Reason</th>
+                    <th style="padding:0.5rem;">Timestamp</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr style="border-bottom:1px solid rgba(51,65,85,0.5);">
+                    <td style="padding:0.5rem; font-weight:600;">{{ log['event_type']|upper }}</td>
+                    <td style="padding:0.5rem;">
+                        <span class="badge {% if log['risk_score'] > 70 %}badge-red{% elif log['risk_score'] > 30 %}badge-yellow{% else %}badge-green{% endif %}">
+                            {{ log['risk_score'] }}
+                        </span>
+                    </td>
+                    <td style="padding:0.5rem; color:#e2e8f0;">{{ log['reason'] }}</td>
+                    <td style="padding:0.5rem; color:#94a3b8;">{{ log['timestamp'] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div style="margin-top:1rem;">
+      <a class="button" href="{{ url_for('logout') }}" style="background:#6366f1;color:#fff;padding:0.6rem 1rem;border-radius:0.5rem;text-decoration:none;">Logout</a>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    const ctxUserRisk = document.getElementById('userRiskChart').getContext('2d');
+    const riskLabels = [{% for log in logs[::-1] %}'{{ log['timestamp'] }}'{% if not loop.last %},{% endif %}{% endfor %}];
+    const riskValues = [{% for log in logs[::-1] %}{{ log['risk_score'] }}{% if not loop.last %},{% endif %}{% endfor %}];
+    new Chart(ctxUserRisk,{
+      type:'line',
+      data:{
+        labels:riskLabels,
+        datasets:[{
+          data:riskValues,
+          borderColor:'#6366f1',
+          backgroundColor:'rgba(99,102,241,0.2)',
+          tension:0.3,
+          fill:true
+        }]
+      },
+      options:{
+        plugins:{legend:{display:false}},
+        scales:{y:{beginAtZero:true,max:100},x:{display:false}}
+      }
+    });
+  </script>
+</body>
+</html>
